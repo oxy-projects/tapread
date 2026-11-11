@@ -19,6 +19,32 @@ import java.util.concurrent.atomic.AtomicInteger
 object TtsManager {
     private const val TAG = "TapReadTTS"
 
+    enum class PlaybackState { IDLE, PREPARING, SPEAKING }
+
+    @Volatile
+    var playbackState = PlaybackState.IDLE
+        private set
+    private val playbackListeners = CopyOnWriteArrayList<(PlaybackState) -> Unit>()
+    private val preparationTimeout = Runnable {
+        if (playbackState == PlaybackState.PREPARING) reportSpeechError()
+    }
+
+    fun addPlaybackListener(listener: (PlaybackState) -> Unit) {
+        playbackListeners.add(listener)
+        listener(playbackState)
+    }
+
+    fun removePlaybackListener(listener: (PlaybackState) -> Unit) {
+        playbackListeners.remove(listener)
+    }
+
+    private fun updatePlayback(value: PlaybackState) {
+        mainHandler.removeCallbacks(preparationTimeout)
+        if (value == PlaybackState.PREPARING) mainHandler.postDelayed(preparationTimeout, 30000L)
+        playbackState = value
+        playbackListeners.forEach { it(value) }
+    }
+
     enum class Status {
         UNINITIALIZED,
         INITIALIZING,
@@ -51,7 +77,13 @@ object TtsManager {
     var status: Status = Status.UNINITIALIZED
         private set(value) {
             field = value
-            mainHandler.post { statusListener?.invoke(value) }
+            mainHandler.post {
+                statusListener?.invoke(value)
+                if (status == value && value != Status.READY && value != Status.INITIALIZING) {
+                    pending.clear()
+                    updatePlayback(PlaybackState.IDLE)
+                }
+            }
         }
 
     @Volatile
@@ -178,12 +210,22 @@ object TtsManager {
 
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
-                if (generation == initGeneration.get() && utteranceId != null && utteranceId in utterances) speakingListener?.invoke(true)
+                mainHandler.post {
+                    if (generation == initGeneration.get() && utteranceId != null && utteranceId in utterances) {
+                        updatePlayback(PlaybackState.SPEAKING)
+                        speakingListener?.invoke(true)
+                    }
+                }
             }
 
             override fun onDone(utteranceId: String?) {
                 if (utteranceId != null && utterances.remove(utteranceId) && utterances.isEmpty()) {
-                    speakingListener?.invoke(false)
+                    mainHandler.post {
+                        if (utterances.isEmpty() && pending.isEmpty()) {
+                            updatePlayback(PlaybackState.IDLE)
+                            speakingListener?.invoke(false)
+                        }
+                    }
                 }
             }
 
@@ -293,6 +335,7 @@ object TtsManager {
             if (status == Status.INITIALIZING || status == Status.UNINITIALIZED) {
                 if (flush) pending.clear()
                 pending += text
+                updatePlayback(PlaybackState.PREPARING)
                 return true
             }
             return false
@@ -312,6 +355,7 @@ object TtsManager {
             if (flush) utterances.clear()
             val ids = chunks.indices.map { "$requestId-$it" }
             utterances.addAll(ids)
+            if (flush || playbackState != PlaybackState.SPEAKING) updatePlayback(PlaybackState.PREPARING)
             chunks.forEachIndexed { index, chunk ->
                 val mode = if (flush && index == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
                 if (engine.speak(chunk, mode, Bundle(), ids[index]) != TextToSpeech.SUCCESS) {
@@ -320,13 +364,14 @@ object TtsManager {
                 }
             }
             true
-        }.getOrDefault(false)
+        }.getOrElse { stop(); false }
     }
 
     fun stop() {
         utterances.clear()
         pending.clear()
         tts?.stop()
+        updatePlayback(PlaybackState.IDLE)
         speakingListener?.invoke(false)
     }
 
@@ -347,6 +392,7 @@ object TtsManager {
     }
 
     private fun shutdownTtsInstanceOnly() {
+        updatePlayback(PlaybackState.IDLE)
         utterances.clear()
         val old = tts
         tts = null

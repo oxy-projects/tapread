@@ -43,16 +43,26 @@ class OverlayService : Service() {
     private var focusReadPending = false
     private var snapAnimator: ValueAnimator? = null
     private var ballVisual: View? = null
+    private var aiRing: AiRingView? = null
+    private val playbackListener: (TtsManager.PlaybackState) -> Unit = { state ->
+        aiRing?.setPlaybackState(state)
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        createChannel()
-        startAsForeground()
-        showOverlay()
-        Prefs.overlayWanted = true
-        isRunning = true
+        try {
+            createChannel()
+            startAsForeground()
+            showOverlay()
+            Prefs.overlayWanted = true
+            isRunning = true
+        } catch (e: Exception) {
+            android.util.Log.w("TapReadOverlay", "Overlay could not start", e)
+            Toast.makeText(this, R.string.overlay_start_failed, Toast.LENGTH_LONG).show()
+            stopSelf()
+        }
     }
 
     override fun onDestroy() {
@@ -114,6 +124,8 @@ class OverlayService : Service() {
         }
 
         ballVisual = view.findViewById(R.id.ballVisual)
+        aiRing = view.findViewById(R.id.aiRing)
+        TtsManager.addPlaybackListener(playbackListener)
         val ball = view.findViewById<ImageButton>(R.id.btnBall)
         setupTouch(ball)
         ball.setOnClickListener { onBallClicked() }
@@ -263,7 +275,7 @@ class OverlayService : Service() {
 
     private fun onBallClicked() {
         if (focusReadPending) return
-        if (TtsManager.isSpeaking()) {
+        if (TtsManager.playbackState != TtsManager.PlaybackState.IDLE) {
             TtsManager.stop()
             vibrateLight()
             return
@@ -342,11 +354,13 @@ class OverlayService : Service() {
     }
 
     private fun removeOverlay() {
+        TtsManager.removePlaybackListener(playbackListener)
+        aiRing = null
         resetBallVisual(animate = false)
         ballVisual = null
         snapAnimator?.cancel()
         snapAnimator = null
-        overlayView?.let { windowManager?.removeView(it) }
+        overlayView?.let { runCatching { windowManager?.removeView(it) } }
         overlayView = null
     }
 

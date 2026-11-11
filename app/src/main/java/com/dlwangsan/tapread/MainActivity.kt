@@ -1,6 +1,7 @@
 package com.dlwangsan.tapread
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.View
@@ -16,14 +17,19 @@ import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
+    private var updatingOverlaySwitch = false
+    private var overlayRequested = true
+    private var overlayStarting = false
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            maybeAutoStartOverlay()
             refreshUi()
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        overlayRequested = savedInstanceState?.getBoolean("overlay_requested", true) ?: true
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -63,8 +69,24 @@ class MainActivity : AppCompatActivity() {
             }
             else -> Unit
         }
+        maybeAutoStartOverlay()
         refreshUi()
         refreshTtsUi(TtsManager.status)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
+            overlayRequested = true
+            maybeAutoStartOverlay()
+            refreshUi()
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("overlay_requested", overlayRequested)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onDestroy() {
@@ -90,7 +112,18 @@ class MainActivity : AppCompatActivity() {
         binding.btnOverlayPermission.setOnClickListener {
             startActivity(PermissionHelper.overlayPermissionIntent(this))
         }
-        binding.btnToggleOverlay.setOnClickListener { toggleOverlay() }
+        binding.switchOverlay.setOnCheckedChangeListener { _, checked ->
+            if (!updatingOverlaySwitch) {
+                overlayRequested = checked
+                if (checked) startOverlay(userInitiated = true)
+                else {
+                    overlayStarting = false
+                    OverlayService.stop(this)
+                    binding.root.postDelayed({ if (!isDestroyed) refreshUi() }, 400)
+                }
+                refreshUi()
+            }
+        }
         binding.btnOpenAccessibility.setOnClickListener {
             startActivity(PermissionHelper.accessibilitySettingsIntent())
         }
@@ -238,26 +271,33 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun toggleOverlay() {
-        if (OverlayService.isRunning) {
-            OverlayService.stop(this)
-            refreshUi()
-            return
-        }
+    private fun maybeAutoStartOverlay() {
+        if (!DeviceCapabilities.canBackgroundClipboardRead && overlayRequested &&
+            PermissionHelper.canDrawOverlays(this)) startOverlay(userInitiated = false)
+    }
+
+    private fun startOverlay(userInitiated: Boolean) {
+        if (OverlayService.isRunning || overlayStarting) return
         if (!PermissionHelper.canDrawOverlays(this)) {
-            Toast.makeText(this, R.string.need_overlay_permission, Toast.LENGTH_LONG).show()
-            startActivity(PermissionHelper.overlayPermissionIntent(this))
+            if (userInitiated) {
+                Toast.makeText(this, R.string.need_overlay_permission, Toast.LENGTH_LONG).show()
+                startActivity(PermissionHelper.overlayPermissionIntent(this))
+            }
             return
         }
-        if (PermissionHelper.notificationPermissionNeeded() &&
-            !PermissionHelper.areNotificationsEnabled(this)
-        ) {
-            Toast.makeText(this, R.string.need_notification_permission, Toast.LENGTH_LONG).show()
-            maybeRequestNotificationPermission()
-            return
+        // Notification denial does not prevent a user-visible foreground service.
+        overlayStarting = true
+        val started = runCatching { OverlayService.start(this) }.isSuccess
+        if (!started) {
+            overlayStarting = false
+            Toast.makeText(this, R.string.overlay_start_failed, Toast.LENGTH_LONG).show()
         }
-        OverlayService.start(this)
-        binding.root.postDelayed({ refreshUi() }, 400)
+        binding.root.postDelayed({
+            if (!isDestroyed) {
+                overlayStarting = false
+                refreshUi()
+            }
+        }, 500)
     }
 
     private fun toggleClipboardMonitor() {
@@ -320,8 +360,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        binding.btnToggleOverlay.text =
-            if (overlayOn) getString(R.string.stop_overlay) else getString(R.string.start_overlay)
+        updatingOverlaySwitch = true
+        binding.switchOverlay.isChecked = overlayOn || overlayStarting
+        updatingOverlaySwitch = false
+        binding.btnOverlayPermission.visibility =
+            if (PermissionHelper.canDrawOverlays(this)) View.GONE else View.VISIBLE
         binding.btnToggleClipboardMonitor.text =
             if (monitorOn) {
                 getString(R.string.stop_clipboard_monitor)

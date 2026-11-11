@@ -4,16 +4,27 @@
     android:layout_height="76dp">
 
     <!-- Animate only this visual; the transparent button keeps a stable touch target. -->
-    <ImageView
+    <FrameLayout
         android:id="@+id/ballVisual"
         android:layout_width="72dp"
         android:layout_height="72dp"
-        android:layout_gravity="center"
-        android:background="@drawable/bg_ball"
-        android:importantForAccessibility="no"
-        android:padding="20dp"
-        android:src="@drawable/ic_read_mark"
-        android:scaleType="fitCenter" />
+        android:layout_gravity="center">
+
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_ball"
+            android:importantForAccessibility="no"
+            android:padding="20dp"
+            android:src="@drawable/ic_read_mark"
+            android:scaleType="fitCenter" />
+
+        <com.dlwangsan.tapread.overlay.AiRingView
+            android:id="@+id/aiRing"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no" />
+    </FrameLayout>
 
     <ImageButton
         android:id="@+id/btnBall"

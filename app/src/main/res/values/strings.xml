@@ -62,4 +62,6 @@
     <string name="system_voice_compatibility">使用系统兼容模式（可能联网）</string>
     <string name="system_voice_compatibility_hint">如果系统能试听中文，但这里无法朗读，可开启此模式。朗读文字会交给当前系统语音引擎，是否联网由引擎决定。默认关闭。</string>
     <string name="tts_status_offline_unknown">当前引擎未提供可确认的离线中文声音，不代表缺少语音包。如果系统中文试听正常，可开启上方「系统兼容模式」。</string>
+    <string name="overlay_home_hint">打开应用自动开启。复制文字后，点屏幕上的蓝色按钮就能听。</string>
+    <string name="overlay_start_failed">悬浮球未能开启，请检查悬浮窗权限后重试。</string>
 </resources>

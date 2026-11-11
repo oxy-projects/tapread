@@ -31,6 +31,47 @@
             android:textColor="@color/ink_soft"
             android:textSize="16sp" />
 
+        <!-- Android 10+ 悬浮球 -->
+        <LinearLayout
+            android:id="@+id/sectionOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:background="@drawable/bg_status"
+            android:orientation="vertical"
+            android:padding="18dp"
+            android:visibility="gone">
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/switchOverlay"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="72dp"
+                android:text="@string/section_overlay"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:textColor="@color/ink"
+                app:thumbIcon="@null" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/overlay_home_hint"
+                android:textColor="@color/muted"
+                android:textSize="14sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnOverlayPermission"
+                style="@style/Widget.TapRead.Button.Outlined"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/overlay_permission" />
+
+        </LinearLayout>
+
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -105,48 +146,6 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="@string/start_clipboard_monitor" />
-        </LinearLayout>
-
-        <!-- Android 10+ 悬浮球 -->
-        <LinearLayout
-            android:id="@+id/sectionOverlay"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:background="@drawable/bg_panel"
-            android:orientation="vertical"
-            android:padding="18dp"
-            android:visibility="gone">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/section_overlay"
-                android:textAppearance="@style/Text.TapRead.Section" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="@string/overlay_mode_hint"
-                android:textColor="@color/muted"
-                android:textSize="14sp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnOverlayPermission"
-                style="@style/Widget.TapRead.Button.Outlined"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="@string/overlay_permission" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnToggleOverlay"
-                style="@style/Widget.TapRead.Button"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/start_overlay" />
         </LinearLayout>
 
         <!-- Android 10+ 无障碍 -->
@@ -274,6 +273,9 @@
                 android:value="1.0"
                 android:valueFrom="0.5"
                 android:valueTo="1.8"
+                app:trackColorActive="@color/accent"
+                app:trackColorInactive="@color/accent_soft"
+                app:thumbColor="@color/accent"
                 app:labelBehavior="gone" />
 
             <TextView
@@ -292,6 +294,9 @@
                 android:value="1.0"
                 android:valueFrom="0.5"
                 android:valueTo="1.8"
+                app:trackColorActive="@color/accent"
+                app:trackColorInactive="@color/accent_soft"
+                app:thumbColor="@color/accent"
                 app:labelBehavior="gone" />
 
             <LinearLayout
