@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Reduce the center mark by 16%, keeping its optical center at 54,54. -->
+    <group android:pivotX="54" android:pivotY="54" android:scaleX="0.84" android:scaleY="0.84">
     <path android:fillColor="@color/icon_blue" android:pathData="M34,30H74Q82,30 82,38V62Q82,70 74,70H49L38,78V70H34Q26,70 26,62V38Q26,30 34,30Z" />
     <path android:fillColor="#00000000" android:strokeColor="@color/icon_warm_white" android:strokeWidth="4.5" android:strokeLineCap="round"
         android:pathData="M41,46V54M53,40V60M65,44V56" />
+    </group>
 </vector>
