@@ -4,7 +4,7 @@
     <string name="app_name_en">TapRead</string>
     <string name="tagline">复制文字，点一下就能听</string>
     <string name="tagline_legacy">复制文字，自动朗读给你听</string>
-    <string name="accessibility_service_description">点读开启后，会在你复制文字时自动朗读。需要读取剪贴板，不会上传内容，也不会操作你的其他应用。</string>
+    <string name="accessibility_service_description">点读开启后，会在你复制文字时自动朗读。需要读取剪贴板，仅使用离线中文声音，不会操作你的其他应用。</string>
     <string name="accessibility_hint">请在系统设置中启用「点读」。启用后回到这里打开「启用复制即读」，复制文字应会自动朗读。若刚改过无障碍开关，建议先关闭再开启一次。</string>
     <string name="overlay_channel_name">悬浮球服务</string>
     <string name="overlay_notification_title">点读悬浮球运行中</string>
@@ -33,7 +33,7 @@
     <string name="open_tts_settings">系统语音设置</string>
     <string name="install_tts_data">下载语音数据</string>
     <string name="refresh_tts">重新检测引擎</string>
-    <string name="privacy_note">剪贴板内容仅在本机用于朗读，不会上传。</string>
+    <string name="privacy_note">仅使用标记为离线的中文声音。剪贴板不保存、不写入日志；声音由系统语音引擎提供，请使用可信引擎。</string>
     <string name="status_overlay_on">悬浮球已开启</string>
     <string name="status_overlay_off">悬浮球未开启</string>
     <string name="status_clipboard_monitor_on">复制即读已开启</string>
@@ -52,9 +52,11 @@
     <string name="tts_status_ready">语音引擎就绪，可用媒体音量试听</string>
     <string name="tts_status_initializing">正在连接系统语音引擎…</string>
     <string name="tts_status_no_engine">暂时连不上语音引擎。请点「重新检测引擎」，或打开系统语音设置确认默认引擎后返回。</string>
-    <string name="tts_status_lang_missing">引擎已连接，但系统报告缺少中文数据。可先试听；若无声再下载语音包。</string>
+    <string name="tts_status_lang_missing">缺少可用的离线中文声音，请下载中文离线语音包，再点「重新检测引擎」。</string>
     <string name="tts_status_error">语音引擎初始化失败，请打开系统语音设置检查。</string>
     <string name="tts_speak_failed">现在还不能朗读。请先配置系统语音引擎。</string>
     <string name="tts_settings_missing">找不到系统语音设置页，请在手机设置里搜索「文字转语音」。</string>
     <string name="engine_count">已发现 %1$d 个语音引擎</string>
+    <string name="read_clipboard">朗读复制的文字</string>
+    <string name="clipboard_unavailable">没有可朗读的文字，请先复制；敏感内容不会朗读</string>
 </resources>

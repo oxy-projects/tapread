@@ -66,7 +66,7 @@ Android 10 起，普通后台应用无法随意读取剪贴板；微信关怀模
 ./gradlew :app:assembleDebug
 ```
 
-需要：JDK 17+、Android SDK 35。
+需要：JDK 17、Android SDK Platform 37（37.0）、SDK Build Tools 36.0.0。构建使用 Gradle 9.3.1 + AGP 9.1.1，Kotlin 使用 AGP 内置支持。
 
 ## 隐私
 
@@ -89,3 +89,24 @@ Android 10 起，普通后台应用无法随意读取剪贴板；微信关怀模
 ## License
 
 [MIT](./LICENSE) © DLWangSan
+
+
+## 本地优化说明
+
+- 不再记录剪贴板正文或复制通知正文；标记为敏感的剪贴板不会朗读。
+- 只选择标记为离线的中文声音；无离线声音时请安装语音包后重新检测。语音引擎是独立应用，请使用可信引擎。
+- 长文本按句分段，并保护 emoji 的 UTF-16 字符边界。
+- 悬浮按钮扩大为 72dp，等待窗口获得焦点后读取，拖动位置限制在屏幕内。
+- 主界面新增「朗读复制的文字」，无需悬浮窗或无障碍权限即可手动朗读。
+- Release 不再默认用 debug 密钥签名；`assembleRelease` 产物需要使用自己的发布密钥签名后安装，测试可用 `assembleDebug`。
+
+文本分段回归测试（需 Kotlin 编译器和 JDK）：
+
+```sh
+kotlinc app/src/main/java/com/dlwangsan/tapread/TextCleaner.kt tests/TextCleanerTest.kt -include-runtime -d /tmp/tapread-text-test.jar
+java -jar /tmp/tapread-text-test.jar
+```
+
+仍需在目标手机验证：离线中文声音、微信复制触发、悬浮窗焦点、锁屏及服务关闭后行为。离线标记由引擎自行声明，不能代替对引擎自身的安全审查。
+
+目标系统：ColorOS 16.0.8 / Android 16，`targetSdk = 36`；编译使用 `compileSdk = 37`，最低支持版本保持 API 26。仍需目标手机真机验证。

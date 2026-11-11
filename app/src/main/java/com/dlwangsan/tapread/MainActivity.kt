@@ -27,6 +27,22 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Android 16 enforces edge-to-edge; keep controls clear of bars and cutouts.
+        val root = binding.root
+        val left = root.paddingLeft
+        val top = root.paddingTop
+        val right = root.paddingRight
+        val bottom = root.paddingBottom
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val safe = insets.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+                    androidx.core.view.WindowInsetsCompat.Type.displayCutout()
+            )
+            view.setPadding(left + safe.left, top + safe.top, right + safe.right, bottom + safe.bottom)
+            insets
+        }
+        androidx.core.view.ViewCompat.requestApplyInsets(root)
+
         TtsManager.init(this)
         setupModeSections()
         setupTtsControls()
@@ -111,6 +127,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.btnReadClipboard.setOnClickListener {
+            val text = ClipboardHelper.readText(this)
+            val message = when {
+                text.isNullOrBlank() -> R.string.clipboard_unavailable
+                !TtsManager.speak(text) -> R.string.tts_speak_failed
+                else -> null
+            }
+            if (message != null) Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        }
         binding.btnTestSpeak.setOnClickListener { testSpeak() }
         binding.btnStopSpeak.setOnClickListener { TtsManager.stop() }
 

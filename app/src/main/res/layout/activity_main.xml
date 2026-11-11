@@ -57,6 +57,15 @@
                 android:textSize="14sp" />
         </LinearLayout>
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnReadClipboard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:minHeight="72dp"
+            android:textSize="22sp"
+            android:text="@string/read_clipboard" />
+
         <!-- Android 9 及以下 -->
         <LinearLayout
             android:id="@+id/sectionLegacyAutoRead"

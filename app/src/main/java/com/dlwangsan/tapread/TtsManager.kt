@@ -39,6 +39,7 @@ object TtsManager {
     private var tts: TextToSpeech? = null
     private val ready = AtomicBoolean(false)
     private val pending = CopyOnWriteArrayList<String>()
+    private val utterances = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private var speakingListener: ((Boolean) -> Unit)? = null
     private var statusListener: ((Status) -> Unit)? = null
     private val initGeneration = AtomicInteger(0)
@@ -175,36 +176,53 @@ object TtsManager {
 
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
-                speakingListener?.invoke(true)
+                if (generation == initGeneration.get() && utteranceId != null && utteranceId in utterances) speakingListener?.invoke(true)
             }
 
             override fun onDone(utteranceId: String?) {
-                speakingListener?.invoke(false)
+                if (utteranceId != null && utterances.remove(utteranceId) && utterances.isEmpty()) {
+                    speakingListener?.invoke(false)
+                }
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
-                speakingListener?.invoke(false)
+                if (generation == initGeneration.get() && utteranceId != null && utteranceId in utterances) reportSpeechError()
             }
 
             override fun onError(utteranceId: String?, errorCode: Int) {
-                speakingListener?.invoke(false)
+                if (generation == initGeneration.get() && utteranceId != null && utteranceId in utterances) reportSpeechError()
             }
         })
 
         when (langResult) {
             TextToSpeech.LANG_MISSING_DATA -> {
-                ready.set(true) // still allow speak attempts; some OEMs mis-report
+                ready.set(false)
                 status = Status.LANG_MISSING
             }
-            else -> {
+            TextToSpeech.LANG_AVAILABLE,
+            TextToSpeech.LANG_COUNTRY_AVAILABLE,
+            TextToSpeech.LANG_COUNTRY_VAR_AVAILABLE -> {
                 ready.set(true)
                 status = Status.READY
+            }
+            else -> {
+                ready.set(false)
+                status = Status.LANG_MISSING
             }
         }
 
         Log.i(TAG, "TTS ready engine=$engineLabel lang=$languageLabel status=$status")
         flushPending()
+    }
+
+    private fun reportSpeechError() {
+        mainHandler.post {
+            stop()
+            appContext?.let {
+                android.widget.Toast.makeText(it, R.string.tts_speak_failed, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     fun setSpeakingListener(listener: ((Boolean) -> Unit)?) {
@@ -271,26 +289,38 @@ object TtsManager {
 
         if (!ready.get()) {
             if (status == Status.INITIALIZING || status == Status.UNINITIALIZED) {
+                if (flush) pending.clear()
                 pending += text
                 return true
             }
-            // LANG_MISSING: still try
-            if (status != Status.LANG_MISSING) return false
+            return false
         }
 
         val engine = tts ?: return false
+        // Recheck on every request: never silently use an online voice.
+        val voice = runCatching { engine.voice }.getOrNull() ?: return false
+        if (voice.isNetworkConnectionRequired || voice.locale.language != "zh") return false
         return runCatching {
             engine.setSpeechRate(Prefs.speechRate)
             engine.setPitch(Prefs.speechPitch)
-            val mode = if (flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
-            val utteranceId = "tapread-${System.currentTimeMillis()}"
-            val params = Bundle()
-            val result = engine.speak(text, mode, params, utteranceId)
-            result == TextToSpeech.SUCCESS
+            val chunks = TextCleaner.chunks(text, TextToSpeech.getMaxSpeechInputLength())
+            val requestId = java.util.UUID.randomUUID().toString()
+            if (flush) utterances.clear()
+            val ids = chunks.indices.map { "$requestId-$it" }
+            utterances.addAll(ids)
+            chunks.forEachIndexed { index, chunk ->
+                val mode = if (flush && index == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+                if (engine.speak(chunk, mode, Bundle(), ids[index]) != TextToSpeech.SUCCESS) {
+                    stop()
+                    return@runCatching false
+                }
+            }
+            true
         }.getOrDefault(false)
     }
 
     fun stop() {
+        utterances.clear()
         pending.clear()
         tts?.stop()
         speakingListener?.invoke(false)
@@ -313,6 +343,7 @@ object TtsManager {
     }
 
     private fun shutdownTtsInstanceOnly() {
+        utterances.clear()
         val old = tts
         tts = null
         runCatching {
@@ -373,32 +404,25 @@ object TtsManager {
             Locale.TRADITIONAL_CHINESE,
             Locale.getDefault()
         )
-        var best = TextToSpeech.LANG_NOT_SUPPORTED
         for (locale in candidates) {
             val result = runCatching { engine.isLanguageAvailable(locale) }
                 .getOrDefault(TextToSpeech.LANG_NOT_SUPPORTED)
             if (result >= TextToSpeech.LANG_AVAILABLE) {
                 runCatching { engine.language = locale }
-                preferChineseVoice(engine, locale)
-                return result
+                if (locale.language == "zh" && preferChineseVoice(engine, locale)) return result
             }
-            if (result > best) best = result
         }
         runCatching { engine.language = Locale.SIMPLIFIED_CHINESE }
-        return best
+        return TextToSpeech.LANG_MISSING_DATA
     }
 
-    private fun preferChineseVoice(engine: TextToSpeech, locale: Locale) {
-        val voices: Set<Voice> = runCatching { engine.voices }.getOrNull() ?: return
+    private fun preferChineseVoice(engine: TextToSpeech, locale: Locale): Boolean {
+        val voices: Set<Voice> = runCatching { engine.voices }.getOrNull() ?: return false
         val match = voices.firstOrNull {
             !it.isNetworkConnectionRequired &&
                 it.locale.language.equals(locale.language, ignoreCase = true)
-        } ?: voices.firstOrNull {
-            it.locale.language.equals(locale.language, ignoreCase = true)
-        }
-        if (match != null) {
-            runCatching { engine.voice = match }
-        }
+        } ?: return false
+        return runCatching { engine.setVoice(match) == TextToSpeech.SUCCESS }.getOrDefault(false)
     }
 
     private fun resolveEngineLabel(engine: TextToSpeech, packageName: String?): String {

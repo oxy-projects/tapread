@@ -19,6 +19,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.view.ViewConfiguration
 import android.widget.ImageButton
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
@@ -33,6 +34,7 @@ class OverlayService : Service() {
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
     private var params: WindowManager.LayoutParams? = null
+    private var focusReadPending = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -131,9 +133,11 @@ class OverlayService : Service() {
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (event.rawX - downX).toInt()
                     val dy = (event.rawY - downY).toInt()
-                    if (abs(dx) > 8 || abs(dy) > 8) moved = true
-                    lp.x = startX + dx
-                    lp.y = startY + dy
+                    if (abs(dx) > ViewConfiguration.get(this).scaledTouchSlop ||
+                        abs(dy) > ViewConfiguration.get(this).scaledTouchSlop) moved = true
+                    val metrics = resources.displayMetrics
+                    lp.x = (startX + dx).coerceIn(0, (metrics.widthPixels - (overlayView?.width ?: 0)).coerceAtLeast(0))
+                    lp.y = (startY + dy).coerceIn(0, (metrics.heightPixels - (overlayView?.height ?: 0)).coerceAtLeast(0))
                     windowManager?.updateViewLayout(overlayView, lp)
                     true
                 }
@@ -147,6 +151,7 @@ class OverlayService : Service() {
     }
 
     private fun onBallClicked() {
+        if (focusReadPending) return
         if (TtsManager.isSpeaking()) {
             TtsManager.stop()
             vibrateLight()
@@ -157,14 +162,14 @@ class OverlayService : Service() {
         withFocusForClipboard {
             val text = ClipboardHelper.readText(this)
             if (text.isNullOrBlank()) {
-                Toast.makeText(this, R.string.clipboard_empty, Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, R.string.clipboard_unavailable, Toast.LENGTH_LONG).show()
                 return@withFocusForClipboard
             }
             val ok = TtsManager.speak(text)
             if (ok) {
                 vibrateLight()
             } else {
-                Toast.makeText(this, R.string.clipboard_empty, Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, R.string.tts_speak_failed, Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -177,19 +182,36 @@ class OverlayService : Service() {
             block()
             return
         }
+        focusReadPending = true
         val originalFlags = lp.flags
-        lp.flags = originalFlags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
-        runCatching { wm.updateViewLayout(view, lp) }
-        view.isFocusableInTouchMode = true
-        view.requestFocus()
-        view.post {
+        var completed = false
+        lateinit var listener: android.view.ViewTreeObserver.OnWindowFocusChangeListener
+        fun finish(read: Boolean) {
+            if (completed) return
+            completed = true
+            focusReadPending = false
+            if (view.viewTreeObserver.isAlive) view.viewTreeObserver.removeOnWindowFocusChangeListener(listener)
             try {
-                block()
+                if (read && overlayView === view) block()
+                else if (overlayView === view) Toast.makeText(this, R.string.clipboard_unavailable, Toast.LENGTH_LONG).show()
             } finally {
                 lp.flags = originalFlags
-                runCatching { wm.updateViewLayout(view, lp) }
+                if (overlayView === view) runCatching { wm.updateViewLayout(view, lp) }
             }
         }
+        listener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { focused ->
+            if (focused) view.post { finish(true) }
+        }
+        view.viewTreeObserver.addOnWindowFocusChangeListener(listener)
+        lp.flags = originalFlags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+        if (runCatching { wm.updateViewLayout(view, lp) }.isFailure) {
+            finish(false)
+            return
+        }
+        view.isFocusableInTouchMode = true
+        view.requestFocus()
+        if (view.hasWindowFocus()) view.post { finish(true) }
+        view.postDelayed({ finish(false) }, 1000)
     }
 
     private fun vibrateLight() {

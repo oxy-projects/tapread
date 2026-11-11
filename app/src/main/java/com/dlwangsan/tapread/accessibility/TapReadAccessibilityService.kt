@@ -30,6 +30,7 @@ class TapReadAccessibilityService : AccessibilityService() {
     private var lastKnownClipboard: String? = null
     private var clipboardSnapshotReady = false
     private var reading = false
+    private var destroyed = false
     private var overlayView: View? = null
 
     private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
@@ -41,6 +42,7 @@ class TapReadAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        destroyed = false
         instance = this
         configureServiceInfo()
         Prefs.init(applicationContext)
@@ -78,7 +80,7 @@ class TapReadAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_ANNOUNCEMENT -> {
                 val text = eventText(event)
                 if (looksLikeCopyFeedback(text)) {
-                    Log.i(TAG, "copy feedback: $text")
+                    Log.i(TAG, "copy feedback received")
                     scheduleClipboardRead("announce", delayMs = 120)
                 }
             }
@@ -98,7 +100,8 @@ class TapReadAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
-        handler.removeCallbacks(readRunnable)
+        destroyed = true
+        handler.removeCallbacksAndMessages(null)
         runCatching {
             val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.removePrimaryClipChangedListener(clipboardListener)
@@ -128,11 +131,11 @@ class TapReadAccessibilityService : AccessibilityService() {
     }
 
     private fun readClipboardAndSpeak() {
-        if (!Prefs.autoReadEnabled || reading) return
+        if (destroyed || !Prefs.autoReadEnabled || reading) return
         reading = true
         readClipboardRaw { text ->
             try {
-                if (text.isNullOrBlank()) return@readClipboardRaw
+                if (destroyed || !Prefs.autoReadEnabled || text.isNullOrBlank()) return@readClipboardRaw
                 val cleaned = TextCleaner.clean(text)
                 if (cleaned.isBlank()) return@readClipboardRaw
 
@@ -157,7 +160,8 @@ class TapReadAccessibilityService : AccessibilityService() {
     }
 
     private fun readClipboardRaw(onResult: (String?) -> Unit) {
-        val direct = ClipboardHelper.readText(this)
+        if (destroyed) { onResult(null); return }
+        val direct = runCatching { ClipboardHelper.readText(this) }.getOrNull()
         if (!direct.isNullOrBlank()) {
             onResult(direct)
             return
@@ -191,18 +195,28 @@ class TapReadAccessibilityService : AccessibilityService() {
             }
         }
 
+        var completed = false
+        lateinit var focusListener: android.view.ViewTreeObserver.OnWindowFocusChangeListener
+        fun finish(read: Boolean) {
+            if (completed || destroyed) return
+            completed = true
+            if (view.viewTreeObserver.isAlive) view.viewTreeObserver.removeOnWindowFocusChangeListener(focusListener)
+            val text = if (read && overlayView === view) ClipboardHelper.readText(this) else null
+            if (overlayView === view) removeOverlay()
+            onResult(text)
+        }
+        focusListener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { focused ->
+            if (focused) handler.post { finish(true) }
+        }
+        view.viewTreeObserver.addOnWindowFocusChangeListener(focusListener)
         try {
             wm.addView(view, params)
             view.requestFocus()
-            handler.postDelayed({
-                val text = ClipboardHelper.readText(this)
-                removeOverlay()
-                onResult(text)
-            }, 80)
-        } catch (t: Throwable) {
+            if (view.hasWindowFocus()) handler.post { finish(true) }
+            handler.postDelayed({ finish(false) }, 1000)
+        } catch (t: Exception) {
             Log.e(TAG, "accessibility overlay failed", t)
-            removeOverlay()
-            onResult(null)
+            finish(false)
         }
     }
 
@@ -223,7 +237,7 @@ class TapReadAccessibilityService : AccessibilityService() {
         if (cleaned == lastSpoken && now - lastSpokenAt < 1200) return
         lastSpoken = cleaned
         lastSpokenAt = now
-        Log.i(TAG, "speak: ${cleaned.take(40)}")
+        Log.i(TAG, "speech requested")
         TtsManager.init(applicationContext)
         TtsManager.speak(cleaned)
     }
