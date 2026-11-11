@@ -56,7 +56,6 @@ class OverlayService : Service() {
             createChannel()
             startAsForeground()
             showOverlay()
-            Prefs.overlayWanted = true
             isRunning = true
         } catch (e: Exception) {
             android.util.Log.w("TapReadOverlay", "Overlay could not start", e)
@@ -67,7 +66,6 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         removeOverlay()
-        Prefs.overlayWanted = false
         isRunning = false
         super.onDestroy()
     }

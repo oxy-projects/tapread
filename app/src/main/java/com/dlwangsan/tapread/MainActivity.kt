@@ -17,7 +17,7 @@ import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
-    private var overlayRequested = true
+    private var overlayRequested = false
     private var overlayStarting = false
 
     private val notificationPermissionLauncher =
@@ -28,7 +28,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        overlayRequested = savedInstanceState?.getBoolean("overlay_requested", true) ?: true
+        overlayRequested = Prefs.overlayWanted
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -77,15 +77,10 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
-            overlayRequested = true
+            overlayRequested = Prefs.overlayWanted
             maybeAutoStartOverlay()
             refreshUi()
         }
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        outState.putBoolean("overlay_requested", overlayRequested)
-        super.onSaveInstanceState(outState)
     }
 
     override fun onDestroy() {
@@ -113,6 +108,7 @@ class MainActivity : AppCompatActivity() {
         }
         binding.btnOverlayPower.setOnClickListener {
             overlayRequested = !(OverlayService.isRunning || overlayStarting)
+            Prefs.overlayWanted = overlayRequested
             if (overlayRequested) startOverlay(userInitiated = true)
             else {
                 overlayStarting = false

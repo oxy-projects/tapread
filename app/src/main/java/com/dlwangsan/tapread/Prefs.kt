@@ -44,6 +44,7 @@ object Prefs {
         get() = snap(sp.getFloat(KEY_SPEECH_PITCH, DEFAULT_SPEECH_PITCH), 0.5f, 1.8f, 0.1f)
         set(value) = sp.edit { putFloat(KEY_SPEECH_PITCH, snap(value, 0.5f, 1.8f, 0.1f)) }
 
+    // User preference, independent of whether the service is currently running.
     var overlayWanted: Boolean
         get() = sp.getBoolean(KEY_OVERLAY_WANTED, false)
         set(value) = sp.edit { putBoolean(KEY_OVERLAY_WANTED, value) }
