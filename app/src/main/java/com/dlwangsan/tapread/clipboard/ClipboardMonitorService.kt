@@ -52,6 +52,7 @@ class ClipboardMonitorService : Service() {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
         runCatching {
             val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.removePrimaryClipChangedListener(clipboardListener)

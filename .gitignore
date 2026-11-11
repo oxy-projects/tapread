@@ -17,3 +17,6 @@ captures/
 
 # Local release signing secrets
 /.signing/
+
+# Kotlin build cache
+/.kotlin/

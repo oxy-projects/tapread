@@ -3,6 +3,8 @@ package com.dlwangsan.tapread
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.AudioAttributes
 import android.os.Bundle
 import android.os.Handler
@@ -18,6 +20,33 @@ import java.util.concurrent.atomic.AtomicInteger
 
 object TtsManager {
     private const val TAG = "TapReadTTS"
+    private const val MAX_TEXT_LENGTH = 100_000
+    private const val MAX_PENDING_REQUESTS = 8
+    private var bindTimeout: Runnable? = null
+    private var focusRequest: AudioFocusRequest? = null
+    private val audioAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
+
+    private fun acquireAudioFocus(): Boolean {
+        if (focusRequest != null) return true
+        val manager = appContext?.getSystemService(AudioManager::class.java) ?: return false
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(audioAttributes)
+            .setWillPauseWhenDucked(true)
+            .setOnAudioFocusChangeListener({ change ->
+                if (change < 0) stop()
+            }, mainHandler).build()
+        if (runCatching { manager.requestAudioFocus(request) }.getOrDefault(AudioManager.AUDIOFOCUS_REQUEST_FAILED)
+            != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) return false
+        focusRequest = request
+        return true
+    }
+
+    private fun releaseAudioFocus() {
+        val request = focusRequest ?: return
+        focusRequest = null
+        runCatching { appContext?.getSystemService(AudioManager::class.java)?.abandonAudioFocusRequest(request) }
+    }
 
     enum class PlaybackState { IDLE, PREPARING, SPEAKING }
 
@@ -25,6 +54,9 @@ object TtsManager {
     var playbackState = PlaybackState.IDLE
         private set
     private val playbackListeners = CopyOnWriteArrayList<(PlaybackState) -> Unit>()
+    private val idleRelease = Runnable {
+        if (playbackState == PlaybackState.IDLE && pending.isEmpty() && status != Status.INITIALIZING) shutdown()
+    }
     private val preparationTimeout = Runnable {
         if (playbackState == PlaybackState.PREPARING) reportSpeechError()
     }
@@ -39,8 +71,11 @@ object TtsManager {
     }
 
     private fun updatePlayback(value: PlaybackState) {
+        mainHandler.removeCallbacks(idleRelease)
+        if (value == PlaybackState.IDLE && ready.get()) mainHandler.postDelayed(idleRelease, 60_000L)
         mainHandler.removeCallbacks(preparationTimeout)
         if (value == PlaybackState.PREPARING) mainHandler.postDelayed(preparationTimeout, 30000L)
+        if (value == PlaybackState.IDLE) releaseAudioFocus()
         playbackState = value
         playbackListeners.forEach { it(value) }
     }
@@ -66,6 +101,7 @@ object TtsManager {
     private var tts: TextToSpeech? = null
     private val ready = AtomicBoolean(false)
     private val pending = CopyOnWriteArrayList<String>()
+    private val queuedChunks = ArrayDeque<Pair<String, String>>()
     private val utterances = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private var speakingListener: ((Boolean) -> Unit)? = null
     private var statusListener: ((Status) -> Unit)? = null
@@ -136,6 +172,7 @@ object TtsManager {
     }
 
     private fun bindNext(context: Context, tryDefaultConstructorFirst: Boolean) {
+        bindTimeout?.let { mainHandler.removeCallbacks(it) }
         val generation = initGeneration.incrementAndGet()
         shutdownTtsInstanceOnly()
 
@@ -165,6 +202,14 @@ object TtsManager {
             bindNext(context, tryDefaultConstructorFirst = false)
             return
         }
+        if (tts != null) {
+            bindTimeout = Runnable {
+                if (generation == initGeneration.get() && status == Status.INITIALIZING) {
+                    Log.w(TAG, "TTS engine binding timed out")
+                    bindNext(context, tryDefaultConstructorFirst = false)
+                }
+            }.also { mainHandler.postDelayed(it, 8000L) }
+        }
     }
 
     private fun onEngineInit(generation: Int, resultCode: Int) {
@@ -172,6 +217,8 @@ object TtsManager {
             Log.w(TAG, "Ignore stale onInit gen=$generation current=${initGeneration.get()}")
             return
         }
+        bindTimeout?.let { mainHandler.removeCallbacks(it) }
+        bindTimeout = null
         val engine = tts
         if (engine == null) {
             status = Status.ERROR
@@ -219,12 +266,13 @@ object TtsManager {
             }
 
             override fun onDone(utteranceId: String?) {
-                if (utteranceId != null && utterances.remove(utteranceId) && utterances.isEmpty()) {
-                    mainHandler.post {
-                        if (utterances.isEmpty() && pending.isEmpty()) {
-                            updatePlayback(PlaybackState.IDLE)
-                            speakingListener?.invoke(false)
-                        }
+                mainHandler.post {
+                    if (generation != initGeneration.get() || utteranceId == null || !utterances.remove(utteranceId)) return@post
+                    if (queuedChunks.isNotEmpty()) {
+                        if (!submitNextChunk()) reportSpeechError()
+                    } else if (utterances.isEmpty() && pending.isEmpty()) {
+                        updatePlayback(PlaybackState.IDLE)
+                        speakingListener?.invoke(false)
                     }
                 }
             }
@@ -324,6 +372,17 @@ object TtsManager {
     }
 
     fun speak(raw: String, flush: Boolean = true): Boolean {
+        val context = appContext ?: return false
+        if (raw.isBlank()) return false
+        if (raw.length > MAX_TEXT_LENGTH) {
+            android.widget.Toast.makeText(context, R.string.tts_text_too_long, android.widget.Toast.LENGTH_LONG).show()
+            return false
+        }
+        return PlaybackService.start(context, raw, flush)
+    }
+
+    internal fun speakInForeground(raw: String, flush: Boolean = true): Boolean {
+        if (raw.length > MAX_TEXT_LENGTH) return false
         val text = TextCleaner.clean(raw)
         if (text.isBlank()) return false
 
@@ -334,6 +393,7 @@ object TtsManager {
         if (!ready.get()) {
             if (status == Status.INITIALIZING || status == Status.UNINITIALIZED) {
                 if (flush) pending.clear()
+                if (pending.size >= MAX_PENDING_REQUESTS || pending.sumOf { it.length } + text.length > MAX_TEXT_LENGTH) return false
                 pending += text
                 updatePlayback(PlaybackState.PREPARING)
                 return true
@@ -347,27 +407,36 @@ object TtsManager {
             val voice = runCatching { engine.voice }.getOrNull() ?: return false
             if (voice.isNetworkConnectionRequired || voice.locale.language != "zh") return false
         }
+        if (!acquireAudioFocus()) return false
         return runCatching {
             engine.setSpeechRate(Prefs.speechRate)
             engine.setPitch(Prefs.speechPitch)
             val chunks = TextCleaner.chunks(text, TextToSpeech.getMaxSpeechInputLength())
             val requestId = java.util.UUID.randomUUID().toString()
-            if (flush) utterances.clear()
-            val ids = chunks.indices.map { "$requestId-$it" }
-            utterances.addAll(ids)
-            if (flush || playbackState != PlaybackState.SPEAKING) updatePlayback(PlaybackState.PREPARING)
-            chunks.forEachIndexed { index, chunk ->
-                val mode = if (flush && index == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
-                if (engine.speak(chunk, mode, Bundle(), ids[index]) != TextToSpeech.SUCCESS) {
-                    stop()
-                    return@runCatching false
-                }
+            if (!flush && queuedChunks.sumOf { it.second.length } + text.length > MAX_TEXT_LENGTH) return@runCatching false
+            if (flush) {
+                utterances.clear()
+                queuedChunks.clear()
+                engine.stop()
             }
-            true
+            chunks.forEachIndexed { index, chunk -> queuedChunks.addLast("$requestId-$index" to chunk) }
+            if (utterances.isEmpty()) {
+                updatePlayback(PlaybackState.PREPARING)
+                submitNextChunk()
+            } else true
         }.getOrElse { stop(); false }
     }
 
+    private fun submitNextChunk(): Boolean {
+        val (id, text) = queuedChunks.removeFirstOrNull() ?: return true
+        utterances.add(id)
+        if (tts?.speak(text, TextToSpeech.QUEUE_ADD, Bundle(), id) == TextToSpeech.SUCCESS) return true
+        stop()
+        return false
+    }
+
     fun stop() {
+        queuedChunks.clear()
         utterances.clear()
         pending.clear()
         tts?.stop()
@@ -380,6 +449,8 @@ object TtsManager {
     }
 
     private fun shutdownInternal(keepStatus: Status) {
+        bindTimeout?.let { mainHandler.removeCallbacks(it) }
+        bindTimeout = null
         initGeneration.incrementAndGet()
         pending.clear()
         ready.set(false)
@@ -392,7 +463,8 @@ object TtsManager {
     }
 
     private fun shutdownTtsInstanceOnly() {
-        updatePlayback(PlaybackState.IDLE)
+        queuedChunks.clear()
+        if (pending.isEmpty()) updatePlayback(PlaybackState.IDLE)
         utterances.clear()
         val old = tts
         tts = null
@@ -434,16 +506,12 @@ object TtsManager {
         val items = pending.toList()
         pending.clear()
         items.forEachIndexed { index, text ->
-            speak(text, flush = index == 0)
+            if (!speakInForeground(text, flush = index == 0)) reportSpeechError()
         }
     }
 
     private fun applyAudioAttributes(engine: TextToSpeech) {
-        val attrs = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_MEDIA)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-            .build()
-        runCatching { engine.setAudioAttributes(attrs) }
+        runCatching { engine.setAudioAttributes(audioAttributes) }
     }
 
     private fun pickChineseLanguage(engine: TextToSpeech): Int {

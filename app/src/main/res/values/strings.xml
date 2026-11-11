@@ -58,7 +58,7 @@
     <string name="tts_settings_missing">找不到系统语音设置页，请在手机设置里搜索「文字转语音」。</string>
     <string name="engine_count">已发现 %1$d 个语音引擎</string>
     <string name="read_clipboard">朗读复制的文字</string>
-    <string name="clipboard_unavailable">未读到可朗读的文字，请先复制后重试；也可能因权限或敏感内容保护被跳过。</string>
+    <string name="clipboard_unavailable">未读到可朗读的文字，可能受系统或敏感内容保护限制。请先复制后重试，或打开 TapRead 点击「朗读复制的文字」。</string>
     <string name="system_voice_compatibility">使用系统兼容模式（可能联网）</string>
     <string name="system_voice_compatibility_hint">如果系统能试听中文，但这里无法朗读，可开启此模式。朗读文字会交给当前系统语音引擎，是否联网由引擎决定。默认关闭。</string>
     <string name="tts_status_offline_unknown">当前引擎未提供可确认的离线中文声音，不代表缺少语音包。如果系统中文试听正常，可开启上方「系统兼容模式」。</string>
@@ -71,5 +71,9 @@
     <string name="overlay_power_tap_off">点击圆圈关闭</string>
     <string name="privacy_reading_title">隐私与朗读</string>
     <string name="allow_sensitive_manual_read">允许手动朗读已标记的敏感内容</string>
-    <string name="sensitive_manual_read_hint">默认关闭。开启后，点击悬浮球或「朗读复制的文字」可读取已标记的敏感内容；自动朗读仍会跳过。请留意周围的人；系统兼容模式下，语音引擎可能联网处理文字。此设置不代表能识别所有隐私内容。</string>
+    <string name="sensitive_manual_read_hint">默认开启。点击悬浮球或「朗读复制的文字」可读取已标记的敏感内容，关闭后将跳过；自动朗读仍会跳过。请留意周围的人；系统兼容模式下，语音引擎可能联网处理文字。此设置不代表能识别所有隐私内容。</string>
+    <string name="playback_channel">文字朗读</string>
+    <string name="playback_notification">正在准备或朗读文字，点按停止可结束播放</string>
+    <string name="playback_stop">停止</string>
+    <string name="tts_text_too_long">文字过长，请分次朗读（每次最多 10 万字）</string>
 </resources>

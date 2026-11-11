@@ -16,9 +16,9 @@ android {
     defaultConfig {
         applicationId = "com.dlwangsan.tapread"
         minSdk = 26
-        targetSdk = 36
-        versionCode = 14
-        versionName = "1.0.0"
+        targetSdk = 37
+        versionCode = 1
+        versionName = "2.0.0"
     }
 
     signingConfigs {
@@ -35,7 +35,8 @@ android {
     buildTypes {
         release {
             if (releaseSigningFile.exists()) signingConfig = signingConfigs.getByName("release")
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
