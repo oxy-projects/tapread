@@ -17,7 +17,6 @@ import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
-    private var updatingOverlaySwitch = false
     private var overlayRequested = true
     private var overlayStarting = false
 
@@ -112,17 +111,15 @@ class MainActivity : AppCompatActivity() {
         binding.btnOverlayPermission.setOnClickListener {
             startActivity(PermissionHelper.overlayPermissionIntent(this))
         }
-        binding.switchOverlay.setOnCheckedChangeListener { _, checked ->
-            if (!updatingOverlaySwitch) {
-                overlayRequested = checked
-                if (checked) startOverlay(userInitiated = true)
-                else {
-                    overlayStarting = false
-                    OverlayService.stop(this)
-                    binding.root.postDelayed({ if (!isDestroyed) refreshUi() }, 400)
-                }
-                refreshUi()
+        binding.btnOverlayPower.setOnClickListener {
+            overlayRequested = !(OverlayService.isRunning || overlayStarting)
+            if (overlayRequested) startOverlay(userInitiated = true)
+            else {
+                overlayStarting = false
+                OverlayService.stop(this)
+                binding.root.postDelayed({ if (!isDestroyed) refreshUi() }, 400)
             }
+            refreshUi()
         }
         binding.btnOpenAccessibility.setOnClickListener {
             startActivity(PermissionHelper.accessibilitySettingsIntent())
@@ -140,6 +137,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupTtsControls() {
+        binding.switchSensitiveRead.isChecked = Prefs.allowSensitiveManualRead
+        binding.switchSensitiveRead.setOnCheckedChangeListener { _, checked ->
+            Prefs.allowSensitiveManualRead = checked
+            if (!checked) TtsManager.stop()
+        }
         binding.switchSystemVoice.isChecked = Prefs.systemVoiceCompatibility
         binding.switchSystemVoice.setOnCheckedChangeListener { _, checked ->
             TtsManager.stop()
@@ -167,7 +169,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnReadClipboard.setOnClickListener {
-            val text = ClipboardHelper.readText(this)
+            val text = ClipboardHelper.readText(this, allowSensitive = Prefs.allowSensitiveManualRead)
             val message = when {
                 text.isNullOrBlank() -> R.string.clipboard_unavailable
                 !TtsManager.speak(text) -> R.string.tts_speak_failed
@@ -360,9 +362,27 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        updatingOverlaySwitch = true
-        binding.switchOverlay.isChecked = overlayOn || overlayStarting
-        updatingOverlaySwitch = false
+        val powerOn = overlayOn || overlayStarting
+        binding.btnOverlayPower.isActivated = powerOn
+        binding.btnOverlayPower.setImageResource(
+            if (powerOn) R.drawable.ic_overlay_stop else R.drawable.ic_overlay_start
+        )
+        binding.btnOverlayPower.contentDescription = getString(
+            if (powerOn) R.string.stop_overlay else R.string.start_overlay
+        )
+        val stateLabel = getString(when {
+            overlayOn -> R.string.overlay_power_on
+            overlayStarting -> R.string.overlay_power_starting
+            else -> R.string.overlay_power_off
+        })
+        binding.overlayPowerState.text = stateLabel
+        binding.overlayPowerState.setTextColor(ContextCompat.getColor(
+            this, if (powerOn) R.color.accent_deep else R.color.ink_soft
+        ))
+        binding.overlayPowerAction.setText(
+            if (powerOn) R.string.overlay_power_tap_off else R.string.overlay_power_tap_on
+        )
+        androidx.core.view.ViewCompat.setStateDescription(binding.btnOverlayPower, stateLabel)
         binding.btnOverlayPermission.visibility =
             if (PermissionHelper.canDrawOverlays(this)) View.GONE else View.VISIBLE
         binding.btnToggleClipboardMonitor.text =

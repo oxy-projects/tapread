@@ -283,7 +283,7 @@ class OverlayService : Service() {
         // Android 10+ only allows clipboard reads for the focused app.
         // Temporarily drop NOT_FOCUSABLE so this overlay can read clipboard.
         withFocusForClipboard {
-            val text = ClipboardHelper.readText(this)
+            val text = ClipboardHelper.readText(this, allowSensitive = Prefs.allowSensitiveManualRead)
             if (text.isNullOrBlank()) {
                 Toast.makeText(this, R.string.clipboard_unavailable, Toast.LENGTH_LONG).show()
                 return@withFocusForClipboard

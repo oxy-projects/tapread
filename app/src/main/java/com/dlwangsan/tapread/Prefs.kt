@@ -28,6 +28,10 @@ object Prefs {
         get() = sp.getBoolean("system_voice_compatibility", false)
         set(value) = sp.edit { putBoolean("system_voice_compatibility", value) }
 
+    var allowSensitiveManualRead: Boolean
+        get() = sp.getBoolean("allow_sensitive_manual_read", false)
+        set(value) = sp.edit { putBoolean("allow_sensitive_manual_read", value) }
+
     var autoReadEnabled: Boolean
         get() = sp.getBoolean(KEY_AUTO_READ, true)
         set(value) = sp.edit { putBoolean(KEY_AUTO_READ, value) }

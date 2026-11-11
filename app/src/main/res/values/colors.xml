@@ -22,4 +22,5 @@
     <color name="icon_outline">#D5DFF4</color>
     <color name="icon_ripple">#282563EB</color>
     <color name="icon_shadow">#182563EB</color>
+    <color name="overlay_power_off">#183B66</color>
 </resources>

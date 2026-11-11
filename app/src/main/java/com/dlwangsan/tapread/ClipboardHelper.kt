@@ -5,16 +5,17 @@ import android.content.ClipboardManager
 import android.content.Context
 
 object ClipboardHelper {
-    fun readText(context: Context): String? = runCatching { readTextInternal(context) }.getOrNull()
+    // Auto-read callers keep the default. Only explicit manual actions may opt in.
+    fun readText(context: Context, allowSensitive: Boolean = false): String? =
+        runCatching { readTextInternal(context, allowSensitive) }.getOrNull()
 
-    private fun readTextInternal(context: Context): String? {
+    private fun readTextInternal(context: Context, allowSensitive: Boolean): String? {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         if (!clipboard.hasPrimaryClip()) return null
         val clip = clipboard.primaryClip ?: return null
         if (clip.itemCount <= 0) return null
         val description = clip.description
-        // Never send explicitly sensitive clipboard content to a speech engine.
-        if (description.extras?.getBoolean("android.content.extra.IS_SENSITIVE", false) == true) return null
+        if (!allowSensitive && description.extras?.getBoolean("android.content.extra.IS_SENSITIVE", false) == true) return null
         if (!description.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) &&
             !description.hasMimeType(ClipDescription.MIMETYPE_TEXT_HTML)
         ) {

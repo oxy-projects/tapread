@@ -42,16 +42,50 @@
             android:padding="18dp"
             android:visibility="gone">
 
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/switchOverlay"
+            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="72dp"
+                android:gravity="center"
                 android:text="@string/section_overlay"
                 android:textSize="24sp"
                 android:textStyle="bold"
+                android:textColor="@color/ink" />
+
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/btnOverlayPower"
+                android:layout_width="144dp"
+                android:layout_height="144dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="20dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_power_button"
+                android:padding="28dp"
+                android:scaleType="fitCenter"
+                android:contentDescription="@string/start_overlay"
+                app:srcCompat="@drawable/ic_overlay_start"
+                app:tint="@color/power_icon_tint" />
+
+            <TextView
+                android:id="@+id/overlayPowerState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="@string/overlay_power_off"
+                android:textSize="22sp"
+                android:textStyle="bold"
                 android:textColor="@color/ink"
-                app:thumbIcon="@null" />
+                android:accessibilityLiveRegion="polite" />
+
+            <TextView
+                android:id="@+id/overlayPowerAction"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="8dp"
+                android:gravity="center"
+                android:text="@string/overlay_power_tap_on"
+                android:textColor="@color/ink_soft"
+                android:textSize="16sp" />
 
             <TextView
                 android:layout_width="match_parent"
@@ -345,6 +379,37 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="@string/refresh_tts" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:background="@drawable/bg_panel"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/privacy_reading_title"
+                android:textAppearance="@style/Text.TapRead.Section" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/switchSensitiveRead"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:minHeight="64dp"
+                android:text="@string/allow_sensitive_manual_read"
+                android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/sensitive_manual_read_hint"
+                android:textColor="@color/ink_soft"
+                android:textSize="14sp" />
         </LinearLayout>
 
         <TextView
