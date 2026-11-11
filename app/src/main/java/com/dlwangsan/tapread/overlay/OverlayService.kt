@@ -1,5 +1,11 @@
 package com.dlwangsan.tapread.overlay
 
+import android.animation.ValueAnimator
+import android.content.res.Configuration
+import android.graphics.Rect
+import android.view.WindowInsets
+import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -35,6 +41,8 @@ class OverlayService : Service() {
     private var overlayView: View? = null
     private var params: WindowManager.LayoutParams? = null
     private var focusReadPending = false
+    private var snapAnimator: ValueAnimator? = null
+    private var ballVisual: View? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -100,16 +108,96 @@ class OverlayService : Service() {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
+            gravity = Gravity.TOP or Gravity.LEFT
             x = 48
             y = 360
         }
 
+        ballVisual = view.findViewById(R.id.ballVisual)
         val ball = view.findViewById<ImageButton>(R.id.btnBall)
         setupTouch(ball)
         ball.setOnClickListener { onBallClicked() }
 
         windowManager?.addView(view, params)
+        view.post { if (overlayView === view) snapToEdge(animate = false) }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        resetBallVisual(animate = false)
+        overlayView?.post { snapToEdge(animate = false) }
+    }
+
+    private fun dragBounds(): Rect {
+        val wm = windowManager ?: return Rect()
+        val view = overlayView ?: return Rect()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val metrics = wm.currentWindowMetrics
+            val safe = metrics.windowInsets.getInsetsIgnoringVisibility(
+                WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
+            )
+            return Rect(safe.left, safe.top,
+                (metrics.bounds.width() - safe.right - view.width).coerceAtLeast(safe.left),
+                (metrics.bounds.height() - safe.bottom - view.height).coerceAtLeast(safe.top))
+        }
+        val metrics = resources.displayMetrics
+        return Rect(0, 0, (metrics.widthPixels - view.width).coerceAtLeast(0),
+            (metrics.heightPixels - view.height).coerceAtLeast(0))
+    }
+
+    private fun snapToEdge(animate: Boolean = true) {
+        snapAnimator?.cancel()
+        val view = overlayView ?: return
+        val lp = params ?: return
+        val bounds = dragBounds()
+        val targetX = if (lp.x.toLong() - bounds.left <= bounds.right.toLong() - lp.x)
+            bounds.left else bounds.right
+        lp.y = lp.y.coerceIn(bounds.top, bounds.bottom)
+        if (!animate || !ValueAnimator.areAnimatorsEnabled() || lp.x == targetX) {
+            lp.x = targetX
+            runCatching { windowManager?.updateViewLayout(view, lp) }
+            return
+        }
+        snapAnimator = ValueAnimator.ofInt(lp.x, targetX).apply {
+            duration = 200L
+            interpolator = DecelerateInterpolator()
+            addUpdateListener {
+                if (overlayView === view) {
+                    lp.x = it.animatedValue as Int
+                    runCatching { windowManager?.updateViewLayout(view, lp) }
+                }
+            }
+            start()
+        }
+    }
+
+    private fun resetBallVisual(animate: Boolean = true) {
+        val visual = ballVisual ?: return
+        visual.animate().cancel()
+        if (animate && ValueAnimator.areAnimatorsEnabled()) {
+            visual.animate().scaleX(1f).scaleY(1f).rotation(0f)
+                .setDuration(340L).setInterpolator(OvershootInterpolator(2f)).start()
+        } else {
+            visual.scaleX = 1f
+            visual.scaleY = 1f
+            visual.rotation = 0f
+        }
+    }
+
+    private fun deformBall(dx: Float, dy: Float) {
+        val visual = ballVisual ?: return
+        if (!ValueAnimator.areAnimatorsEnabled()) return
+        val distance = kotlin.math.hypot(dx, dy)
+        if (distance < 0.5f) return
+        val amount = (distance / (resources.displayMetrics.density * 18f)).coerceIn(0f, 1f)
+        val horizontal = abs(dx) >= abs(dy)
+        // Cap stretching at 5% so the artwork stays inside the overlay window.
+        val stretch = 1f + 0.05f * amount
+        val squash = 1f - 0.07f * amount
+        visual.animate().cancel()
+        visual.animate().scaleX(if (horizontal) stretch else squash)
+            .scaleY(if (horizontal) squash else stretch)
+            .rotation(0f).setDuration(65L).setInterpolator(DecelerateInterpolator()).start()
     }
 
     private fun setupTouch(ball: View) {
@@ -118,12 +206,24 @@ class OverlayService : Service() {
         var startX = 0
         var startY = 0
         var moved = false
+        var lastX = 0f
+        var lastY = 0f
 
         ball.setOnTouchListener { _, event ->
             val lp = params ?: return@setOnTouchListener false
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
+                    snapAnimator?.cancel()
                     moved = false
+                    ballVisual?.let { visual ->
+                        visual.animate().cancel()
+                        if (ValueAnimator.areAnimatorsEnabled()) {
+                            visual.animate().scaleX(0.96f).scaleY(0.96f).setDuration(80L)
+                                .setInterpolator(DecelerateInterpolator()).start()
+                        }
+                    }
+                    lastX = event.rawX
+                    lastY = event.rawY
                     downX = event.rawX
                     downY = event.rawY
                     startX = lp.x
@@ -135,14 +235,25 @@ class OverlayService : Service() {
                     val dy = (event.rawY - downY).toInt()
                     if (abs(dx) > ViewConfiguration.get(this).scaledTouchSlop ||
                         abs(dy) > ViewConfiguration.get(this).scaledTouchSlop) moved = true
-                    val metrics = resources.displayMetrics
-                    lp.x = (startX + dx).coerceIn(0, (metrics.widthPixels - (overlayView?.width ?: 0)).coerceAtLeast(0))
-                    lp.y = (startY + dy).coerceIn(0, (metrics.heightPixels - (overlayView?.height ?: 0)).coerceAtLeast(0))
-                    windowManager?.updateViewLayout(overlayView, lp)
+                    if (moved) {
+                        deformBall(event.rawX - lastX, event.rawY - lastY)
+                        val bounds = dragBounds()
+                        lp.x = (startX + dx).coerceIn(bounds.left, bounds.right)
+                        lp.y = (startY + dy).coerceIn(bounds.top, bounds.bottom)
+                        runCatching { windowManager?.updateViewLayout(overlayView, lp) }
+                    }
+                    lastX = event.rawX
+                    lastY = event.rawY
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (!moved) ball.performClick()
+                    resetBallVisual()
+                    if (!moved) ball.performClick() else snapToEdge()
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    resetBallVisual()
+                    snapToEdge()
                     true
                 }
                 else -> false
@@ -231,6 +342,10 @@ class OverlayService : Service() {
     }
 
     private fun removeOverlay() {
+        resetBallVisual(animate = false)
+        ballVisual = null
+        snapAnimator?.cancel()
+        snapAnimator = null
         overlayView?.let { windowManager?.removeView(it) }
         overlayView = null
     }

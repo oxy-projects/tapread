@@ -1,5 +1,12 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
+}
+
+val releaseSigningFile = rootProject.file(".signing/release.properties")
+val releaseSigning = Properties().apply {
+    if (releaseSigningFile.exists()) releaseSigningFile.inputStream().use { load(it) }
 }
 
 android {
@@ -10,12 +17,24 @@ android {
         applicationId = "com.dlwangsan.tapread"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.1.5"
+        versionCode = 10
+        versionName = "0.1.9"
+    }
+
+    signingConfigs {
+        if (releaseSigningFile.exists()) {
+            create("release") {
+                storeFile = rootProject.file(releaseSigning.getProperty("storeFile"))
+                storePassword = releaseSigning.getProperty("storePassword")
+                keyAlias = releaseSigning.getProperty("keyAlias")
+                keyPassword = releaseSigning.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
+            if (releaseSigningFile.exists()) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

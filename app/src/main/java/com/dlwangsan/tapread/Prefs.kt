@@ -23,6 +23,11 @@ object Prefs {
         sp = context.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
     }
 
+    // Explicit user opt-in is required before using voices whose offline status is unknown.
+    var systemVoiceCompatibility: Boolean
+        get() = sp.getBoolean("system_voice_compatibility", false)
+        set(value) = sp.edit { putBoolean("system_voice_compatibility", value) }
+
     var autoReadEnabled: Boolean
         get() = sp.getBoolean(KEY_AUTO_READ, true)
         set(value) = sp.edit { putBoolean(KEY_AUTO_READ, value) }

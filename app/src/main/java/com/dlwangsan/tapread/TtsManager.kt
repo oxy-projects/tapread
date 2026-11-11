@@ -25,6 +25,7 @@ object TtsManager {
         READY,
         NO_ENGINE,
         LANG_MISSING,
+        OFFLINE_UNAVAILABLE,
         ERROR
     }
 
@@ -166,11 +167,12 @@ object TtsManager {
         engine.setPitch(Prefs.speechPitch)
 
         val langResult = pickChineseLanguage(engine)
-        languageLabel = when (langResult) {
+        languageLabel = if (Prefs.systemVoiceCompatibility) "系统声音（请试听确认中文）" else when (langResult) {
             TextToSpeech.LANG_AVAILABLE,
             TextToSpeech.LANG_COUNTRY_AVAILABLE,
             TextToSpeech.LANG_COUNTRY_VAR_AVAILABLE -> "中文可用"
-            TextToSpeech.LANG_MISSING_DATA -> "缺少中文语音数据"
+            TextToSpeech.LANG_MISSING_DATA -> if (Prefs.systemVoiceCompatibility)
+                "系统引擎未确认中文支持" else "无法确认离线中文声音"
             else -> "当前引擎可能不支持中文"
         }
 
@@ -198,7 +200,7 @@ object TtsManager {
         when (langResult) {
             TextToSpeech.LANG_MISSING_DATA -> {
                 ready.set(false)
-                status = Status.LANG_MISSING
+                status = if (Prefs.systemVoiceCompatibility) Status.LANG_MISSING else Status.OFFLINE_UNAVAILABLE
             }
             TextToSpeech.LANG_AVAILABLE,
             TextToSpeech.LANG_COUNTRY_AVAILABLE,
@@ -208,7 +210,7 @@ object TtsManager {
             }
             else -> {
                 ready.set(false)
-                status = Status.LANG_MISSING
+                status = if (Prefs.systemVoiceCompatibility) Status.LANG_MISSING else Status.OFFLINE_UNAVAILABLE
             }
         }
 
@@ -297,9 +299,11 @@ object TtsManager {
         }
 
         val engine = tts ?: return false
-        // Recheck on every request: never silently use an online voice.
-        val voice = runCatching { engine.voice }.getOrNull() ?: return false
-        if (voice.isNetworkConnectionRequired || voice.locale.language != "zh") return false
+        // Only an explicit compatibility-mode choice may bypass offline voice metadata checks.
+        if (!Prefs.systemVoiceCompatibility) {
+            val voice = runCatching { engine.voice }.getOrNull() ?: return false
+            if (voice.isNetworkConnectionRequired || voice.locale.language != "zh") return false
+        }
         return runCatching {
             engine.setSpeechRate(Prefs.speechRate)
             engine.setPitch(Prefs.speechPitch)
@@ -397,6 +401,11 @@ object TtsManager {
     }
 
     private fun pickChineseLanguage(engine: TextToSpeech): Int {
+        // Keep the user's selected system voice in compatibility mode.
+        if (Prefs.systemVoiceCompatibility &&
+            runCatching { engine.voice?.locale?.language == "zh" }.getOrDefault(false)) {
+            return TextToSpeech.LANG_AVAILABLE
+        }
         val candidates = listOf(
             Locale.SIMPLIFIED_CHINESE,
             Locale.CHINA,
@@ -408,11 +417,15 @@ object TtsManager {
             val result = runCatching { engine.isLanguageAvailable(locale) }
                 .getOrDefault(TextToSpeech.LANG_NOT_SUPPORTED)
             if (result >= TextToSpeech.LANG_AVAILABLE) {
-                runCatching { engine.language = locale }
-                if (locale.language == "zh" && preferChineseVoice(engine, locale)) return result
+                val selected = runCatching { engine.setLanguage(locale) }
+                    .getOrDefault(TextToSpeech.LANG_NOT_SUPPORTED)
+                if (locale.language == "zh" && selected >= TextToSpeech.LANG_AVAILABLE &&
+                    (Prefs.systemVoiceCompatibility || preferChineseVoice(engine, locale))) return selected
             }
         }
-        runCatching { engine.language = Locale.SIMPLIFIED_CHINESE }
+        // Some OEM engines can speak their configured voice but omit language/voice metadata.
+        // In explicitly enabled compatibility mode, allow the user to audition that voice.
+        if (Prefs.systemVoiceCompatibility) return TextToSpeech.LANG_AVAILABLE
         return TextToSpeech.LANG_MISSING_DATA
     }
 

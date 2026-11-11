@@ -16,4 +16,10 @@
     <color name="ball">#0F7A4F</color>
     <color name="ball_active">#0A5A3A</color>
     <color name="on_accent">#FFFFFF</color>
+    <!-- Approved 清爽蓝 icon palette. -->
+    <color name="icon_blue">#2563EB</color>
+    <color name="icon_warm_white">#FFFDF8</color>
+    <color name="icon_outline">#D5DFF4</color>
+    <color name="icon_ripple">#282563EB</color>
+    <color name="icon_shadow">#182563EB</color>
 </resources>

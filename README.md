@@ -35,7 +35,7 @@ Android 10+ blocks background apps from reading the clipboard. Care Mode in WeCh
 - **Android 10+** — copy → tap the floating ball, or enable Accessibility for auto read
 - System TTS with speech rate / pitch and a shortcut into system voice settings
 - Skips very short text and simple verification-code patterns
-- TapRead does not upload clipboard text; speech is delegated to a trusted system TTS engine using a voice marked offline
+- TapRead does not upload clipboard text; speech is delegated to a trusted system TTS engine using an offline voice by default (explicit system compatibility mode may use network voices)
 
 ## Modes
 
@@ -92,11 +92,11 @@ Requirements: JDK 17, Android SDK Platform 37 (37.0), SDK Build Tools 36.0.0. Gr
 ## 本地优化说明
 
 - 不再记录剪贴板正文或复制通知正文；标记为敏感的剪贴板不会朗读。
-- 只选择标记为离线的中文声音；无离线声音时请安装语音包后重新检测。语音引擎是独立应用，请使用可信引擎。
+- 默认只选择标记为离线的中文声音。系统能试听但应用无法确认离线元数据时，可手动开启「系统兼容模式（可能联网）」；该模式使用系统声音，是否联网由独立语音引擎决定。
 - 长文本按句分段，并保护 emoji 的 UTF-16 字符边界。
 - 悬浮按钮扩大为 72dp，等待窗口获得焦点后读取，拖动位置限制在屏幕内。
 - 主界面新增「朗读复制的文字」，无需悬浮窗或无障碍权限即可手动朗读。
-- Release 不再默认用 debug 密钥签名；`assembleRelease` 产物需要使用自己的发布密钥签名后安装，测试可用 `assembleDebug`。
+- Release 使用本机 `.signing/release.properties` 配置的独立密钥签名；该目录已忽略，需妥善备份其中的密钥和配置。未配置时生成未签名 Release，测试也可用 `assembleDebug`。
 
 文本分段回归测试（需 Kotlin 编译器和 JDK）：
 

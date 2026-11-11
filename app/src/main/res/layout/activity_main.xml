@@ -213,6 +213,22 @@
                 android:textColor="@color/muted"
                 android:textSize="14sp" />
 
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/switchSystemVoice"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:minHeight="56dp"
+                android:text="@string/system_voice_compatibility"
+                android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/system_voice_compatibility_hint"
+                android:textColor="@color/muted"
+                android:textSize="14sp" />
+
             <TextView
                 android:id="@+id/ttsEngineText"
                 android:layout_width="match_parent"

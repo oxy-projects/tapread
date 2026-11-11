@@ -107,6 +107,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupTtsControls() {
+        binding.switchSystemVoice.isChecked = Prefs.systemVoiceCompatibility
+        binding.switchSystemVoice.setOnCheckedChangeListener { _, checked ->
+            TtsManager.stop()
+            Prefs.systemVoiceCompatibility = checked
+            TtsManager.reinit(this)
+        }
         val rate = Prefs.speechRate
         val pitch = Prefs.speechPitch
         binding.speechRateSlider.value = rate
@@ -205,6 +211,7 @@ class MainActivity : AppCompatActivity() {
             TtsManager.Status.UNINITIALIZED -> getString(R.string.tts_status_initializing)
             TtsManager.Status.NO_ENGINE -> getString(R.string.tts_status_no_engine)
             TtsManager.Status.LANG_MISSING -> getString(R.string.tts_status_lang_missing)
+            TtsManager.Status.OFFLINE_UNAVAILABLE -> getString(R.string.tts_status_offline_unknown)
             TtsManager.Status.ERROR -> getString(R.string.tts_status_error)
         }
 
